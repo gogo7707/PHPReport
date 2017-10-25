@@ -27,6 +27,8 @@
  */
 
 require __DIR__ . '/vendor/autoload.php';
+define('EXCEL_EXTENSION_2003', "xls");  
+define('EXCEL_EXTENSION_2007', "xlsx");  
 
 class PHPReport {
     
@@ -387,14 +389,31 @@ class PHPReport {
             
             $this->load($loadCollection);
             $this->generateReport();
+            //$this->generateImage(); 
+            //print_r($imageInfo);
+
         }
     }
     
+   
     /**
      * Generates report based on loaded data 
      */
     public function generateReport()
     {
+/*    	
+if(getExtendFileName($this->_template) == EXCEL_EXTENSION_2003)  
+{  
+    $this->generateImage(); 
+}  
+else if(getExtendFileName($this->_template) == EXCEL_EXTENSION_2007)  
+{  
+    $this->generateImage1(); 
+} */
+$worksheet = $this->objPHPExcel->getActiveSheet();  
+$imageInfo = $this->extractImageFromWorksheet($worksheet,'uploads/');  
+ 
+
 		$this->_lastColumn=$this->objWorksheet->getHighestColumn();//TODO: better detection
 		$this->_lastRow=$this->objWorksheet->getHighestRow();
         foreach($this->_data as $data)
@@ -519,6 +538,78 @@ class PHPReport {
      * Generates single non-repeating row of data
      * @param array $data 
      */
+
+public function extractImageFromWorksheet($worksheet,$basePath){  
+   
+    $result = array();  
+   
+    $imageFileName = "";  
+     if (!is_dir($basePath)){  
+        $res=mkdir($basePath,0777,true); 
+       }
+   
+    foreach ($worksheet->getDrawingCollection() as $drawing) {  
+        $xy=$drawing->getCoordinates();  
+        $path = $basePath;  
+        // for xlsx  
+        if ($drawing instanceof PHPExcel_Worksheet_Drawing) {  
+   
+            $filename = $drawing->getPath();  
+   
+            $imageFileName = $drawing->getIndexedFilename();  
+                   
+            $path = $path . $drawing->getIndexedFilename();  
+   
+            copy($filename, $path);  
+   
+            $result[$xy] = $path;  
+   
+            // for xls  
+        } else if ($drawing instanceof PHPExcel_Worksheet_MemoryDrawing) {  
+   
+            $image = $drawing->getImageResource();  
+   
+            $renderingFunction = $drawing->getRenderingFunction();  
+   
+            switch ($renderingFunction) {  
+   
+                case PHPExcel_Worksheet_MemoryDrawing::RENDERING_JPEG:  
+                           
+                    $imageFileName = $drawing->getIndexedFilename();  
+                    $path = $path . $drawing->getIndexedFilename();  
+                    imagejpeg($image, $path);  
+                    break;  
+   
+                case PHPExcel_Worksheet_MemoryDrawing::RENDERING_GIF:  
+                    $imageFileName = $drawing->getIndexedFilename();  
+                    $path = $path . $drawing->getIndexedFilename();  
+                    imagegif($image, $path);  
+                    break;  
+   
+                case PHPExcel_Worksheet_MemoryDrawing::RENDERING_PNG:  
+                    $imageFileName = $drawing->getIndexedFilename();  
+                    $path = $path . $drawing->getIndexedFilename();  
+                    imagepng($image, $path);  
+                    break;  
+   
+                case PHPExcel_Worksheet_MemoryDrawing::RENDERING_DEFAULT:  
+                    $imageFileName = $drawing->getIndexedFilename();  
+                    $path = $path . $drawing->getIndexedFilename();  
+                    imagegif($image, $path);  
+                    break;  
+            }  
+            $result[$xy] = $imageFileName;  
+        }  
+        $cell = $worksheet->getCell($xy);
+        //$html='<img src="'.$result[$xy].'" height="200" width="200" />';
+        $html='{'.$result[$xy].'|graph}';
+        $cell->setValue($html);
+    
+    }  
+   
+    return $result;  
+}  
+     
     private function generateSingleRow(& $data)
     {
         $id=$data['id'];
@@ -948,6 +1039,10 @@ class PHPReport {
 		$html .= $this->objWriter->generateSheetData();
 		$html .= $this->objWriter->generateHTMLFooter();
 		$html .= '';
+
+$pregRule = "/{(.*?(?:[\.jpg|\.jpeg|\.png|\.gif|\.bmp]))\|graph\}/i";
+$html = preg_replace($pregRule, '<img src="uploads/${1}" style="width:200px;height:100px;">', $html);
+		
 		$this->objPHPExcel->disconnectWorkSheets();
 		unset($this->objWriter);
 		unset($this->objWorksheet);
@@ -998,16 +1093,31 @@ class PHPReport {
     /**
      * Renders report as a PDF file
 	 */
+	 
 	private function renderPdf($filename)
 	{
+$rendererName = PHPExcel_Settings::PDF_RENDERER_DOMPDF;
+$rendererLibrary = 'DomPDF';
+$rendererLibraryPath = 'D:/MYOA17/webroot/PHPReport/vendor/phpoffice/phpexcel/Classes/PHPExcel/Writer/PDF';		
+if (!PHPExcel_Settings::setPdfRenderer(
+		$rendererName,
+		$rendererLibraryPath
+	)) {
+	die(
+		'NOTICE: Please set the $rendererName and $rendererLibraryPath values' .
+		'<br />' .
+		'at the top of this script as appropriate for your directory structure'
+	);
+}
         header('Content-Type: application/vnd.pdf');
 		header('Content-Disposition: attachment;filename="'.$filename.'.pdf"');
 		header('Cache-Control: max-age=0');
 		
 		$this->objWriter = PHPExcel_IOFactory::createWriter($this->objPHPExcel, 'PDF');
-
+        $this->objWriter->setSheetIndex(0);
         $this->objWriter->save('php://output');
-		exit();
+		//exit();
+		return;
     }
     
 	/**
@@ -1075,3 +1185,10 @@ function pixel2unit($p)
 {
 	return ($p-5)/7;
 }
+
+function getExtendFileName($file_name) {  
+   
+    $extend = pathinfo($file_name);  
+    $extend = strtolower($extend["extension"]);  
+    return $extend;  
+} 
