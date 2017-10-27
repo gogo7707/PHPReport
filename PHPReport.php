@@ -389,8 +389,6 @@ class PHPReport {
             
             $this->load($loadCollection);
             $this->generateReport();
-            //$this->generateImage(); 
-            //print_r($imageInfo);
 
         }
     }
@@ -401,19 +399,6 @@ class PHPReport {
      */
     public function generateReport()
     {
-/*    	
-if(getExtendFileName($this->_template) == EXCEL_EXTENSION_2003)  
-{  
-    $this->generateImage(); 
-}  
-else if(getExtendFileName($this->_template) == EXCEL_EXTENSION_2007)  
-{  
-    $this->generateImage1(); 
-} */
-$worksheet = $this->objPHPExcel->getActiveSheet();  
-$imageInfo = $this->extractImageFromWorksheet($worksheet,'uploads/');  
- 
-
 		$this->_lastColumn=$this->objWorksheet->getHighestColumn();//TODO: better detection
 		$this->_lastRow=$this->objWorksheet->getHighestRow();
         foreach($this->_data as $data)
@@ -561,8 +546,9 @@ public function extractImageFromWorksheet($worksheet,$basePath){
             $path = $path . $drawing->getIndexedFilename();  
    
             copy($filename, $path);  
-   
-            $result[$xy] = $path;  
+            $height = $drawing->getHeight();
+						$width = $drawing->getWidth();  
+            $result[$xy] = $imageFileName;  
    
             // for xls  
         } else if ($drawing instanceof PHPExcel_Worksheet_MemoryDrawing) {  
@@ -598,15 +584,14 @@ public function extractImageFromWorksheet($worksheet,$basePath){
                     imagegif($image, $path);  
                     break;  
             }  
+            $height = $drawing->getHeight();
+						$width = $drawing->getWidth();            
             $result[$xy] = $imageFileName;  
         }  
         $cell = $worksheet->getCell($xy);
-        //$html='<img src="'.$result[$xy].'" height="200" width="200" />';
-        $html='{'.$result[$xy].'|graph}';
+        $html='{'.$result[$xy]."|graph($width,$height)}";    //replace image like {a2.png|graph(100,200)}
         $cell->setValue($html);
-    
     }  
-   
     return $result;  
 }  
      
@@ -1031,6 +1016,8 @@ public function extractImageFromWorksheet($worksheet,$basePath){
 	 */
 	private function renderHtml()
     {
+        $worksheet = $this->objPHPExcel->getActiveSheet();      	
+    	  $imageInfo = $this->extractImageFromWorksheet($worksheet,'uploads/');  
         $this->objWriter = new PHPExcel_Writer_HTML($this->objPHPExcel);
 
 		// Generate HTML
@@ -1039,9 +1026,13 @@ public function extractImageFromWorksheet($worksheet,$basePath){
 		$html .= $this->objWriter->generateSheetData();
 		$html .= $this->objWriter->generateHTMLFooter();
 		$html .= '';
-
-$pregRule = "/{(.*?(?:[\.jpg|\.jpeg|\.png|\.gif|\.bmp]))\|graph\}/i";
-$html = preg_replace($pregRule, '<img src="uploads/${1}" style="width:200px;height:100px;">', $html);
+		
+if(getExtendFileName($this->_template) == EXCEL_EXTENSION_2007) {
+	$pregRule = "/<img (.*?) src=\"zip:\/\/(.*?) \/>/i";  // clear 2007 no work image html
+	$html = preg_replace($pregRule, '', $html);
+}
+$pregRule ="/{(.*?(?:[\.jpg|\.jpeg|\.png|\.gif|\.bmp]))\|graph\((\d{1,3}),(\d{1,3})\)\}/i";     // replace {a2.png|graph(100,200)} to html 
+$html = preg_replace($pregRule, '<img src="uploads/${1}" style="width:${2}px;height:${3}px;border:0;">', $html);
 		
 		$this->objPHPExcel->disconnectWorkSheets();
 		unset($this->objWriter);
@@ -1098,7 +1089,7 @@ $html = preg_replace($pregRule, '<img src="uploads/${1}" style="width:200px;heig
 	{
 $rendererName = PHPExcel_Settings::PDF_RENDERER_DOMPDF;
 $rendererLibrary = 'DomPDF';
-$rendererLibraryPath = 'D:/MYOA17/webroot/PHPReport/vendor/phpoffice/phpexcel/Classes/PHPExcel/Writer/PDF';		
+$rendererLibraryPath = '../vendor/phpoffice/phpexcel/Classes/PHPExcel/Writer/PDF';		
 if (!PHPExcel_Settings::setPdfRenderer(
 		$rendererName,
 		$rendererLibraryPath
